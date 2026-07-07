@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Interview Trainer Agent — Summary{% endblock %}
+
+{% block content %}
+<div class="summary-wrapper">
+
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <div class="summary-header">
+    <div class="summary-trophy">&#127942;</div>
+    <h1 class="summary-title">Interview Complete!</h1>
+    <p class="summary-subtitle">
+      Well done, <strong>{{ interview.name }}</strong>! Here is your full performance report
+      for the <em>{{ interview.job_role }}</em> mock interview.
+    </p>
+  </div>
+
+  <!-- ── Overall score card ─────────────────────────────────────────── -->
+  <div class="card overall-card">
+    <div class="overall-inner">
+      <div class="overall-score-ring">
+        {% set pct = ((overall_score / 10) * 314) | round | int %}
+        <svg viewBox="0 0 140 140" class="ring-svg-lg">
+          <circle cx="70" cy="70" r="58" class="ring-bg" />
+          <circle cx="70" cy="70" r="58" class="ring-fill ring-fill-lg"
+            stroke-dasharray="364"
+            stroke-dashoffset="{{ 364 - pct }}" />
+        </svg>
+        <div class="overall-score-number">{{ overall_score }}</div>
+        <div class="overall-score-label">/ 10</div>
+      </div>
+      <div class="overall-meta">
+        <h2 class="overall-grade">
+          {% if overall_score >= 9 %}Exceptional &#127775;
+          {% elif overall_score >= 7 %}Strong Performance &#9989;
+          {% elif overall_score >= 5 %}Good Effort &#128077;
+          {% else %}Needs Improvement &#128218;
+          {% endif %}
+        </h2>
+        <div class="overall-pills">
+          <span class="pill">{{ interview.job_role }}</span>
+          <span class="pill">{{ interview.experience }}</span>
+          <span class="pill">{{ interview.interview_type }} Interview</span>
+        </div>
+        <p class="overall-note">
+          You answered {{ interview.answers | length }} question(s).
+          Average score: <strong>{{ overall_score }} / 10</strong>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Per-question breakdown ─────────────────────────────────────── -->
+  <div class="breakdown-section">
+    <h2 class="section-title">Question-by-Question Breakdown</h2>
+
+    {% for item in interview.answers %}
+    {% set score = interview.scores[loop.index0] %}
+    <div class="card breakdown-card">
+      <div class="breakdown-header">
+        <span class="q-badge">Q{{ loop.index }}</span>
+        <span class="breakdown-score
+          {% if score >= 8 %}score-high
+          {% elif score >= 5 %}score-mid
+          {% else %}score-low{% endif %}">
+          {{ score }}/10
+        </span>
+      </div>
+      <p class="breakdown-question">{{ item.question }}</p>
+      <div class="breakdown-answer">
+        <span class="answer-label">Your Answer:</span>
+        <p>{{ item.answer }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── Action buttons ─────────────────────────────────────────────── -->
+  <div class="summary-actions" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+    <a href="/interview_setup" class="btn btn-primary">
+      &#8635; Start New Interview
+    </a>
+    <a href="/" class="btn btn-secondary">
+      &#8962; Back to Home
+    </a>
+  </div>
+
+</div>
+{% endblock %}
