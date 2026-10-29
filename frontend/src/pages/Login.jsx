@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../services/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -9,16 +10,30 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [notice, setNotice] = useState(location.state?.message || '');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
+    
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await login(email, password);
+      await login(cleanEmail, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to login. Please check credentials.');
+      setError(getErrorMessage(err, 'Failed to login. Please check your credentials.'));
     } finally {
       setLoading(false);
     }
@@ -40,6 +55,11 @@ export default function Login() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-slate-800 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-100 dark:border-slate-700">
           <form className="space-y-6" onSubmit={handleSubmit}>
+            {notice && (
+              <div className="bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 text-sm p-3 rounded-lg border border-green-200 dark:border-green-900/50">
+                {notice}
+              </div>
+            )}
             {error && (
               <div className="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm p-3 rounded-lg border border-red-200 dark:border-red-900/50">
                 {error}
@@ -54,8 +74,13 @@ export default function Login() {
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck="false"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
               />
             </div>
@@ -68,8 +93,10 @@ export default function Login() {
                 id="password"
                 type="password"
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
               />
             </div>

@@ -64,7 +64,7 @@ export default function Header() {
               </div>
               <div className="text-left hidden md:block">
                 <p className="text-sm font-semibold text-gray-800 dark:text-white leading-none">{user.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize leading-tight">{user.roles.join(', ')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize leading-tight">{(Array.isArray(user.roles) ? user.roles : ['student']).join(', ')}</p>
               </div>
               <button 
                 onClick={logout}

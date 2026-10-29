@@ -1,7 +1,42 @@
 import axios from 'axios';
 
-const rawBaseURL = import.meta.env.VITE_API_URL || '';
-const baseURL = rawBaseURL ? `${rawBaseURL.replace(/\/+$/, '')}/api/v1` : '/api/v1';
+const rawBaseURL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const baseURL = rawBaseURL
+  ? (rawBaseURL.endsWith('/api/v1') ? rawBaseURL : `${rawBaseURL}/api/v1`)
+  : '/api/v1';
+
+export const getErrorMessage = (err, fallback = 'An unexpected error occurred.') => {
+  if (!err) return fallback;
+  const data = err.response?.data;
+  if (!data) return err.message || fallback;
+
+  // 1. String detail
+  if (typeof data.detail === 'string') {
+    return data.detail;
+  }
+  // 2. FastAPI validation error list
+  if (Array.isArray(data.detail)) {
+    return data.detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item.msg) {
+          const field = item.loc && item.loc.length > 0 ? item.loc[item.loc.length - 1] : null;
+          return field && field !== 'body' ? `${field}: ${item.msg}` : item.msg;
+        }
+        return JSON.stringify(item);
+      })
+      .join(', ');
+  }
+  // 3. Object detail
+  if (data.detail && typeof data.detail === 'object') {
+    return data.detail.message || data.detail.msg || JSON.stringify(data.detail);
+  }
+  // 4. Message field
+  if (typeof data.message === 'string') {
+    return data.message;
+  }
+  return fallback;
+};
 
 const api = axios.create({
   baseURL: baseURL,

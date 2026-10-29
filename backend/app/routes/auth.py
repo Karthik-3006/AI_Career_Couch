@@ -1,4 +1,5 @@
-import datetime
+import re
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
@@ -15,9 +16,15 @@ def register(user_data: UserRegister):
     Registers a new user account, hashes password, and saves details to MongoDB.
     """
     db = get_db()
+    email = user_data.email.strip().lower()
     
-    # Check if user already exists
-    existing = db.users.find_one({"email": user_data.email})
+    # Check if user already exists (case-insensitive check)
+    existing = db.users.find_one({
+        "$or": [
+            {"email": email},
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+        ]
+    })
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -26,16 +33,22 @@ def register(user_data: UserRegister):
         
     hashed_pwd = get_password_hash(user_data.password)
     
-    user_dict = user_data.dict()
-    # Remove password and insert hashed password
+    dump_fn = getattr(user_data, "model_dump", getattr(user_data, "dict", None))
+    user_dict = dump_fn()
+    # Remove plain password and insert hashed password
     user_dict.pop("password", None)
+    
+    now = datetime.now(timezone.utc)
     user_dict.update({
+        "email": email,
+        "name": user_data.name.strip(),
         "password_hash": hashed_pwd,
+        "roles": user_dict.get("roles") or ["student"],
         "is_active": True,
         "is_subscriber": False,
         "subscription_expires_at": None,
-        "created_at": datetime.datetime.utcnow(),
-        "updated_at": datetime.datetime.utcnow()
+        "created_at": now,
+        "updated_at": now
     })
     
     try:
@@ -54,7 +67,13 @@ def login(login_data: UserLogin):
     Logs in a user, returning a secure JWT token on success.
     """
     db = get_db()
-    user = db.users.find_one({"email": login_data.email})
+    email = login_data.email.strip().lower()
+    user = db.users.find_one({
+        "$or": [
+            {"email": email},
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+        ]
+    })
     if not user or not verify_password(login_data.password, user.get("password_hash", "")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -62,8 +81,28 @@ def login(login_data: UserLogin):
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    access_token = create_access_token(data={"sub": user["email"], "roles": user.get("roles", ["student"])})
-    return {"access_token": access_token, "token_type": "bearer"}
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account has been deactivated."
+        )
+
+    canonical_email = user.get("email", email).strip().lower()
+    roles = user.get("roles") or ["student"]
+    access_token = create_access_token(data={"sub": canonical_email, "roles": roles})
+    
+    user_resp = {**user, "_id": str(user["_id"])}
+    user_resp.pop("password_hash", None)
+    if "roles" not in user_resp or not user_resp["roles"]:
+        user_resp["roles"] = ["student"]
+    if "is_subscriber" not in user_resp:
+        user_resp["is_subscriber"] = False
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user_resp
+    }
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: dict = Depends(get_current_user)):
@@ -78,12 +117,13 @@ def update_me(profile_data: UserProfileUpdate, current_user: dict = Depends(get_
     Updates the authenticated user's profile fields.
     """
     db = get_db()
-    update_dict = {k: v for k, v in profile_data.dict(exclude_unset=True).items() if v is not None}
+    dump_fn = getattr(profile_data, "model_dump", getattr(profile_data, "dict", None))
+    update_dict = {k: v for k, v in dump_fn(exclude_unset=True).items() if v is not None}
     
     if not update_dict:
         return current_user
         
-    update_dict["updated_at"] = datetime.datetime.utcnow()
+    update_dict["updated_at"] = datetime.now(timezone.utc)
     
     db.users.update_one(
         {"_id": ObjectId(current_user["_id"])},
@@ -91,5 +131,9 @@ def update_me(profile_data: UserProfileUpdate, current_user: dict = Depends(get_
     )
     
     updated_user = db.users.find_one({"_id": ObjectId(current_user["_id"])})
-    updated_user["_id"] = str(updated_user["_id"])
-    return updated_user
+    if updated_user:
+        updated_user["_id"] = str(updated_user["_id"])
+        if not updated_user.get("roles"):
+            updated_user["roles"] = ["student"]
+        return updated_user
+    return current_user

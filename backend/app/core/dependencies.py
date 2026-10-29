@@ -1,3 +1,4 @@
+import re
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -27,12 +28,25 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
         
     db = get_db()
-    user = db.users.find_one({"email": email})
+    clean_email = email.strip().lower()
+    user = db.users.find_one({
+        "$or": [
+            {"email": clean_email},
+            {"email": {"$regex": f"^{re.escape(clean_email)}$", "$options": "i"}}
+        ]
+    })
     if user is None:
         raise credentials_exception
         
     # Convert ObjectId to string for Pydantic compatibility
     user["_id"] = str(user["_id"])
+    if not user.get("roles"):
+        user["roles"] = ["student"]
+    if "is_subscriber" not in user:
+        user["is_subscriber"] = False
+    if "is_active" not in user:
+        user["is_active"] = True
+
     return user
 
 def require_role(roles: list[str]):

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../services/api';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -28,19 +29,53 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    const cleanName = formData.name.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+    
+    if (cleanName.length < 2) {
+      setError('Full Name must be at least 2 characters.');
+      return;
+    }
+    if (!cleanEmail) {
+      setError('Please provide a valid email address.');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
     setLoading(true);
     
-    // Parse graduation year
+    let gradYear = null;
+    if (formData.graduation_year) {
+      const parsed = parseInt(formData.graduation_year, 10);
+      if (!isNaN(parsed)) {
+        gradYear = parsed;
+      }
+    }
+
     const payload = {
       ...formData,
-      graduation_year: formData.graduation_year ? parseInt(formData.graduation_year) : null
+      name: cleanName,
+      email: cleanEmail,
+      college: formData.college?.trim() || null,
+      degree: formData.degree?.trim() || null,
+      graduation_year: gradYear
     };
 
     try {
-      await register(payload);
-      navigate('/dashboard');
+      const loggedInUser = await register(payload);
+      if (loggedInUser) {
+        navigate('/dashboard');
+      } else {
+        navigate('/login', {
+          state: { message: 'Account created successfully! Please sign in with your credentials.' }
+        });
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. Check details.');
+      setError(getErrorMessage(err, 'Registration failed. Please check your details and try again.'));
     } finally {
       setLoading(false);
     }
@@ -75,8 +110,11 @@ export default function Register() {
                   name="name"
                   type="text"
                   required
+                  minLength={2}
+                  maxLength={50}
                   value={formData.name}
                   onChange={handleChange}
+                  placeholder="e.g. Alex Smith"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -87,8 +125,13 @@ export default function Register() {
                   name="email"
                   type="email"
                   required
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck="false"
                   value={formData.email}
                   onChange={handleChange}
+                  placeholder="name@example.com"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -100,6 +143,9 @@ export default function Register() {
                 name="password"
                 type="password"
                 required
+                minLength={6}
+                maxLength={72}
+                autoComplete="new-password"
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="At least 6 characters"
@@ -115,6 +161,7 @@ export default function Register() {
                   type="text"
                   value={formData.college}
                   onChange={handleChange}
+                  placeholder="e.g. Stanford University"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-800 dark:text-white rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -124,6 +171,8 @@ export default function Register() {
                 <input
                   name="graduation_year"
                   type="number"
+                  min={1980}
+                  max={2050}
                   placeholder="e.g. 2026"
                   value={formData.graduation_year}
                   onChange={handleChange}

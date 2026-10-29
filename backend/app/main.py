@@ -29,10 +29,10 @@ app = FastAPI(
 )
 
 # CORS Configuration
-# React + Vite runs on http://localhost:5173 by default
+# Supports local development and deployed frontend environments with credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict to actual origin
+    allow_origin_regex=r"^https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,8 +45,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "success": False,
+            "detail": "An internal server error occurred.",
             "message": "An internal server error occurred.",
+            "success": False,
             "error_code": "INTERNAL_SERVER_ERROR"
         }
     )
