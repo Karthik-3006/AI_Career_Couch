@@ -28,13 +28,21 @@
       <!-- Drop zone -->
       <div class="ra-dropzone" id="setupDropzone">
         <div class="ra-drop-icon">📂</div>
-        <p class="ra-drop-text">Drag &amp; drop your <strong>.txt</strong> resume here</p>
-        <p class="ra-drop-sub">or</p>
+        <p class="ra-drop-text">Drag &amp; drop your resume here</p>
+        <p class="ra-drop-sub" style="font-size:12px;color:var(--muted);margin:4px 0 10px;">
+          Supports <strong>PDF</strong>, <strong>Word (.docx/.doc)</strong>, <strong>Images (PNG, JPG, WEBP)</strong>, <strong>Text (.txt)</strong>
+        </p>
         <label class="portal-btn portal-btn-outline" style="cursor:pointer;font-size:14px;">
           Browse File
-          <input type="file" id="setupResumeFile" accept=".txt,.text" style="display:none" />
+          <input type="file" id="setupResumeFile"
+            accept=".pdf,.docx,.doc,.txt,.text,.png,.jpg,.jpeg,.webp,.bmp,.tiff,.gif"
+            style="display:none" />
         </label>
         <p class="ra-file-name hidden" id="setupFileName"></p>
+        <div id="setupFileProgress" class="hidden" style="margin-top:10px;font-size:13px;color:var(--muted);">
+          <span class="rmap-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>
+          Extracting text from file…
+        </div>
       </div>
 
       <div class="ra-divider"><span>or paste resume text below</span></div>
@@ -212,28 +220,63 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("tabManual").classList.toggle("active",  tab === "manual");
   };
 
-  // ── File drag & drop ──────────────────────────────────────────
-  const dropzone  = document.getElementById("setupDropzone");
-  const fileInput = document.getElementById("setupResumeFile");
-  const fileNameEl= document.getElementById("setupFileName");
-  const textarea  = document.getElementById("setupResumeText");
+  // ── File drag & drop (multi-format) ──────────────────────────
+  const dropzone   = document.getElementById("setupDropzone");
+  const fileInput  = document.getElementById("setupResumeFile");
+  const fileNameEl = document.getElementById("setupFileName");
+  const fileProgress = document.getElementById("setupFileProgress");
+  const textarea   = document.getElementById("setupResumeText");
 
   dropzone.addEventListener("dragover",  e => { e.preventDefault(); dropzone.classList.add("drag-over"); });
   dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
   dropzone.addEventListener("drop", e => {
     e.preventDefault(); dropzone.classList.remove("drag-over");
-    if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
   });
-  fileInput.addEventListener("change", () => { if (fileInput.files[0]) readFile(fileInput.files[0]); });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) handleFileUpload(fileInput.files[0]);
+  });
 
-  function readFile(file) {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      textarea.value = ev.target.result;
+  async function handleFileUpload(file) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    const textTypes = ["txt", "text"];
+
+    // Plain text files: read client-side instantly
+    if (textTypes.includes(ext)) {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        textarea.value = ev.target.result;
+        fileNameEl.textContent = "✅ Loaded: " + file.name;
+        fileNameEl.classList.remove("hidden");
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    // PDF / DOCX / image: send to server for extraction
+    fileProgress.classList.remove("hidden");
+    fileNameEl.classList.add("hidden");
+    const errEl = document.getElementById("setupResumeError");
+    errEl.textContent = "";
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res  = await fetch("/upload_file", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || "Could not extract text from file.";
+        return;
+      }
+      textarea.value = data.text || "";
       fileNameEl.textContent = "✅ Loaded: " + file.name;
       fileNameEl.classList.remove("hidden");
-    };
-    reader.readAsText(file);
+    } catch(err) {
+      errEl.textContent = "Network error while uploading file. Please try again or paste text manually.";
+    } finally {
+      fileProgress.classList.add("hidden");
+    }
   }
 
   // ── Reset back to Step 1 ──────────────────────────────────────

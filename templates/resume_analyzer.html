@@ -15,18 +15,26 @@
   <!-- Upload card -->
   <div class="ra-upload-card" id="uploadCard">
     <h2 class="rmap-form-title">Upload Your Resume / CV</h2>
-    <p class="rmap-form-sub">Supported formats: <strong>.txt</strong> or paste text directly below. Max 8,000 characters.</p>
+    <p class="rmap-form-sub">Supported: <strong>PDF</strong>, <strong>Word (.docx/.doc)</strong>, <strong>Images (PNG, JPG, WEBP)</strong>, <strong>Text (.txt)</strong> — or paste text below.</p>
 
     <!-- Drop zone -->
     <div class="ra-dropzone" id="dropzone">
       <div class="ra-drop-icon">📂</div>
-      <p class="ra-drop-text">Drag &amp; drop your <strong>.txt</strong> resume here</p>
-      <p class="ra-drop-sub">or</p>
+      <p class="ra-drop-text">Drag &amp; drop your resume here</p>
+      <p class="ra-drop-sub" style="font-size:12px;color:var(--muted);margin:4px 0 10px;">
+        PDF · Word (.docx/.doc) · Images (PNG, JPG, WEBP) · Text (.txt)
+      </p>
       <label class="portal-btn portal-btn-outline" style="cursor:pointer;">
         Browse File
-        <input type="file" id="resumeFile" accept=".txt,.text" style="display:none" />
+        <input type="file" id="resumeFile"
+          accept=".pdf,.docx,.doc,.txt,.text,.png,.jpg,.jpeg,.webp,.bmp,.tiff,.gif"
+          style="display:none" />
       </label>
       <p class="ra-file-name hidden" id="fileName"></p>
+      <div id="raFileProgress" class="hidden" style="margin-top:10px;font-size:13px;color:var(--muted);">
+        <span class="rmap-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>
+        Extracting text from file…
+      </div>
     </div>
 
     <!-- Or paste text -->
@@ -63,32 +71,64 @@
 {% block scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-  const dropzone   = document.getElementById("dropzone");
-  const fileInput  = document.getElementById("resumeFile");
-  const fileNameEl = document.getElementById("fileName");
-  const textarea   = document.getElementById("resumeText");
+  // ── File drag & drop (multi-format) ──────────────────────────
+  const dropzone    = document.getElementById("dropzone");
+  const fileInput   = document.getElementById("resumeFile");
+  const fileNameEl  = document.getElementById("fileName");
+  const fileProgress = document.getElementById("raFileProgress");
+  const textarea    = document.getElementById("resumeText");
+  const raTextError = document.getElementById("raTextError");
 
-  // ── File drag & drop ──────────────────────────────────────────
   dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag-over"); });
   dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
   dropzone.addEventListener("drop", e => {
     e.preventDefault();
     dropzone.classList.remove("drag-over");
     const file = e.dataTransfer.files[0];
-    if (file) readFile(file);
+    if (file) handleFileUpload(file);
   });
   fileInput.addEventListener("change", () => {
-    if (fileInput.files[0]) readFile(fileInput.files[0]);
+    if (fileInput.files[0]) handleFileUpload(fileInput.files[0]);
   });
 
-  function readFile(file) {
-    const reader = new FileReader();
-    reader.onload = ev => {
-      textarea.value = ev.target.result;
+  async function handleFileUpload(file) {
+    const ext = file.name.split(".").pop().toLowerCase();
+
+    // Plain text: read client-side
+    if (ext === "txt" || ext === "text") {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        textarea.value = ev.target.result;
+        fileNameEl.textContent = "✅ Loaded: " + file.name;
+        fileNameEl.classList.remove("hidden");
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    // PDF / DOCX / image: server-side extraction
+    fileProgress.classList.remove("hidden");
+    fileNameEl.classList.add("hidden");
+    raTextError.textContent = "";
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res  = await fetch("/upload_file", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        raTextError.textContent = data.error || "Could not extract text from file.";
+        return;
+      }
+      textarea.value = data.text || "";
       fileNameEl.textContent = "✅ Loaded: " + file.name;
       fileNameEl.classList.remove("hidden");
-    };
-    reader.readAsText(file);
+    } catch(err) {
+      raTextError.textContent = "Network error while uploading file. Please try again or paste text manually.";
+    } finally {
+      fileProgress.classList.add("hidden");
+    }
   }
 
   // ── Analyze button ────────────────────────────────────────────

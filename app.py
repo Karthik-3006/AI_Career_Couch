@@ -6,6 +6,7 @@ from granite_api import (
     analyze_resume, analyze_skills, generate_roadmap,
     extract_skills_from_resume, parse_resume_profile,
 )
+from file_parser import extract_text, allowed_file, ACCEPTED_MIME_TYPES
 
 app = Flask(__name__)
 app.secret_key = "ai_interview_trainer_secret_key_2024"
@@ -51,6 +52,41 @@ def resume_analyzer():
 @app.route("/skill_analyzer")
 def skill_analyzer():
     return render_template("skill_analyzer.html", active_page="skills")
+
+
+# ── File Upload (multi-format) ────────────────────────────────────────────────
+
+@app.route("/upload_file", methods=["POST"])
+def upload_file():
+    """
+    Accept a binary file upload (PDF, DOCX, DOC, TXT, images) and return
+    the extracted plain text so the frontend can populate the resume textarea.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided."}), 400
+
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"error": "Empty file."}), 400
+
+    if not allowed_file(f.filename):
+        return jsonify({
+            "error": (
+                "Unsupported file type. Please upload a PDF, Word document (.docx), "
+                "plain text (.txt), or image (PNG, JPG, JPEG, WEBP, BMP, TIFF)."
+            )
+        }), 400
+
+    file_bytes = f.read()
+    text = extract_text(file_bytes, f.filename)
+
+    if text.startswith("[Error]"):
+        return jsonify({"error": text[len("[Error] "):]}), 422
+
+    if not text.strip():
+        return jsonify({"error": "No text could be extracted from this file. Please paste your resume text manually."}), 422
+
+    return jsonify({"text": text, "filename": f.filename})
 
 
 # ── AI Analysis APIs ──────────────────────────────────────────────────────────
