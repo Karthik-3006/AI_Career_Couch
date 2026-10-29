@@ -75,13 +75,38 @@ def on_startup():
     except Exception as exc:
         logger.error(f"Critical error during startup sequence: {exc}")
 
-@app.get("/")
-def read_root():
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+@app.get("/api/health")
+def health_check():
     return {
         "status": "online",
         "service": "AI Career Coach Backend REST API",
         "docs_url": "/docs"
     }
+
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+if os.path.exists(frontend_dist) and os.path.exists(os.path.join(frontend_dist, "index.html")):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            return JSONResponse(status_code=404, content={"message": "Not found"})
+        target_file = os.path.join(frontend_dist, full_path)
+        if full_path and os.path.isfile(target_file):
+            return FileResponse(target_file)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    @app.get("/")
+    def read_root():
+        return {
+            "status": "online",
+            "service": "AI Career Coach Backend REST API",
+            "docs_url": "/docs"
+        }
 
 if __name__ == "__main__":
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
