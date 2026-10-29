@@ -9,6 +9,16 @@ import {
 export default function CodingPractice() {
   const { user } = useAuth();
   
+  const hasAccess = Boolean(user?.is_subscriber || user?.is_trial_active || user?.bypass_all || user?.has_access || user?.roles?.includes('admin'));
+
+  if (user && !hasAccess) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <Paywall featureName="Coding Practice & Interactive Compiler" />
+      </div>
+    );
+  }
+  
   // States
   const [problems, setProblems] = useState([]);
   const [selectedLanguage, setSelectedLanguage] = useState('Python');

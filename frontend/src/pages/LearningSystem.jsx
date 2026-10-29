@@ -7,7 +7,9 @@ import Paywall from '../components/Paywall';
 export default function LearningSystem() {
   const { user } = useAuth();
   
-  if (user && !user.is_subscriber) {
+  const hasAccess = Boolean(user?.is_subscriber || user?.is_trial_active || user?.bypass_all || user?.has_access || user?.roles?.includes('admin'));
+
+  if (user && !hasAccess) {
     return (
       <div className="max-w-4xl mx-auto py-8">
         <Paywall featureName="Academic Syllabus & Placement Quizzes" />
@@ -693,7 +695,7 @@ export default function LearningSystem() {
                 className="w-full flex-grow font-mono text-xs border border-gray-300 dark:border-gray-700 p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none bg-gray-900 text-gray-100"
               />
               <div className="mt-4 flex justify-between items-center gap-4">
-                <span className="text-[10px] text-gray-400 dark:text-gray-500">Runs sandbox subprocess. Limits enforced on non-subscribers.</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">Runs sandbox subprocess. Included in 3-Day Free Trial & Premium.</span>
                 <button onClick={handleCompileSubmit} disabled={compilerRunning} className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm cursor-pointer whitespace-nowrap">
                   {compilerRunning ? 'Compiling Subprocess...' : 'Run Python Solution'}
                 </button>

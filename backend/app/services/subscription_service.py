@@ -30,6 +30,48 @@ def is_bypass_all_active() -> bool:
         return False
     return bool(settings.get("bypass_all", False))
 
+def is_subscription_enforced() -> bool:
+    """
+    Checks if paid subscription enforcement is currently active platform-wide.
+    If Bypass All is active, subscription is NOT enforced.
+    Otherwise returns whether subscription enforcement is enabled in system settings.
+    """
+    if is_bypass_all_active():
+        return False
+    db = get_db()
+    settings = db.system_settings.find_one({"_id": "global_settings"})
+    if not settings:
+        return True
+    return bool(settings.get("subscription_enforced", True))
+
+def set_subscription_enforcement(enforced: bool) -> dict:
+    """
+    Enables or disables subscription requirement platform-wide.
+    """
+    db = get_db()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db.system_settings.update_one(
+        {"_id": "global_settings"},
+        {
+            "$set": {
+                "subscription_enforced": bool(enforced),
+                "bypass_all": not bool(enforced),
+                "updated_at": now
+            }
+        },
+        upsert=True
+    )
+    return {
+        "success": True,
+        "subscription_enforced": bool(enforced),
+        "bypass_all": not bool(enforced),
+        "message": (
+            "Paid subscription requirement is now raised and enforced."
+            if enforced else
+            "All platform features are now completely free for all users (Bypass All active)."
+        )
+    }
+
 def set_bypass_all(bypass: bool) -> dict:
     """
     Enables or disables the 'Bypass All' override platform-wide.
@@ -50,6 +92,7 @@ def set_bypass_all(bypass: bool) -> dict:
     return {
         "success": True,
         "bypass_all": bool(bypass),
+        "subscription_enforced": not bool(bypass),
         "message": (
             "Bypass All activated: All platform features are now unlocked for everyone."
             if bypass else
@@ -61,15 +104,30 @@ def get_user_trial_status(user: dict) -> dict:
     """
     Calculates whether the user's 3-day free trial is currently active.
     Every new user gets 3 days of free access starting from account registration.
+    Existing users without trial_expires_at get 3 days from current time.
     """
-    bypass = is_bypass_all_active()
+    bypass = is_bypass_all_active() or not is_subscription_enforced()
     now = datetime.datetime.now(datetime.timezone.utc)
     
     # Check trial expiry date
     trial_exp = to_utc(user.get("trial_expires_at"))
     if not trial_exp:
-        created_at = to_utc(user.get("created_at")) or now
-        trial_exp = created_at + datetime.timedelta(days=TRIAL_DURATION_DAYS)
+        created_at = to_utc(user.get("created_at"))
+        if created_at and (now - created_at) < datetime.timedelta(days=TRIAL_DURATION_DAYS):
+            trial_exp = created_at + datetime.timedelta(days=TRIAL_DURATION_DAYS)
+        else:
+            # Grant 3 days free trial from now for accounts without recorded trial expiration
+            trial_exp = now + datetime.timedelta(days=TRIAL_DURATION_DAYS)
+
+        # Persist to database so countdown is stable across requests
+        user_id = user.get("_id")
+        if user_id:
+            try:
+                db = get_db()
+                oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+                db.users.update_one({"_id": oid}, {"$set": {"trial_expires_at": trial_exp}})
+            except Exception:
+                pass
         
     is_active = (now < trial_exp) or bypass
     time_diff = trial_exp - now
@@ -88,13 +146,13 @@ def get_user_trial_status(user: dict) -> dict:
 def is_user_subscriber(user: dict) -> bool:
     """
     Determines whether the user currently has access to platform features:
-    1. If Admin has enabled 'Bypass All', access is granted.
+    1. If Admin has enabled 'Bypass All' or subscription is not enforced, access is granted.
     2. If user is an Admin, access is granted.
     3. If user has an active paid subscription, access is granted.
     4. If user is within their 3-day free trial period, access is granted.
     5. After 3 days, trial expires and auto-subscription mode activates.
     """
-    if is_bypass_all_active():
+    if is_bypass_all_active() or not is_subscription_enforced():
         return True
 
     roles = user.get("roles") or []

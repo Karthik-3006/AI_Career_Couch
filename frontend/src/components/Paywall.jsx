@@ -21,6 +21,12 @@ export default function Paywall({ featureName, onSubscribed }) {
     loadPaymentSettings();
   }, []);
 
+  useEffect(() => {
+    if (user?.is_trial_active || user?.bypass_all || user?.has_access || user?.is_subscriber || user?.roles?.includes('admin')) {
+      if (onSubscribed) onSubscribed();
+    }
+  }, [user, onSubscribed]);
+
   const loadPaymentSettings = async () => {
     setLoading(true);
     try {

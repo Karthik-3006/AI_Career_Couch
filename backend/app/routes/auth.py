@@ -63,7 +63,8 @@ def register(user_data: UserRegister):
         user_dict["trial_days_left"] = trial_status["trial_days_left"]
         user_dict["trial_expires_at"] = trial_status["trial_expires_at"]
         user_dict["bypass_all"] = trial_status["bypass_all"]
-        user_dict["is_subscriber"] = is_user_subscriber(user_dict)
+        user_dict["has_access"] = is_user_subscriber(user_dict)
+        user_dict["is_subscriber"] = bool(user_dict.get("is_subscriber", False))
         return user_dict
     except DuplicateKeyError:
         raise HTTPException(
@@ -112,7 +113,8 @@ def login(login_data: UserLogin):
     user_resp["trial_days_left"] = trial_status["trial_days_left"]
     user_resp["trial_expires_at"] = trial_status["trial_expires_at"]
     user_resp["bypass_all"] = trial_status["bypass_all"]
-    user_resp["is_subscriber"] = is_user_subscriber(user)
+    user_resp["has_access"] = is_user_subscriber(user)
+    user_resp["is_subscriber"] = bool(user.get("is_subscriber", False))
 
     return {
         "access_token": access_token,
@@ -151,5 +153,13 @@ def update_me(profile_data: UserProfileUpdate, current_user: dict = Depends(get_
         updated_user["_id"] = str(updated_user["_id"])
         if not updated_user.get("roles"):
             updated_user["roles"] = ["student"]
+        from backend.app.services.subscription_service import is_user_subscriber, get_user_trial_status
+        trial_status = get_user_trial_status(updated_user)
+        updated_user["is_trial_active"] = trial_status["is_trial_active"]
+        updated_user["trial_days_left"] = trial_status["trial_days_left"]
+        updated_user["trial_expires_at"] = trial_status["trial_expires_at"]
+        updated_user["bypass_all"] = trial_status["bypass_all"]
+        updated_user["has_access"] = is_user_subscriber(updated_user)
+        updated_user["is_subscriber"] = bool(updated_user.get("is_subscriber", False))
         return updated_user
     return current_user

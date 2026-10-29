@@ -19,6 +19,7 @@ class UserBase(BaseModel):
     is_trial_active: bool = Field(default=False)
     trial_days_left: Optional[int] = None
     bypass_all: bool = Field(default=False)
+    has_access: bool = Field(default=False)
 
     @field_validator("name", mode="before")
     @classmethod

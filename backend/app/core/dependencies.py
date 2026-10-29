@@ -49,7 +49,8 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     user["trial_days_left"] = trial_status["trial_days_left"]
     user["trial_expires_at"] = trial_status["trial_expires_at"]
     user["bypass_all"] = trial_status["bypass_all"]
-    user["is_subscriber"] = is_user_subscriber(user)
+    user["has_access"] = is_user_subscriber(user)
+    user["is_subscriber"] = bool(user.get("is_subscriber", False))
     
     if "is_active" not in user:
         user["is_active"] = True
