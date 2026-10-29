@@ -44,9 +44,9 @@ export default function Header() {
         {user && (
           <>
             {user.is_subscriber ? (
-              <span className="flex items-center text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white px-2.5 py-1 rounded-full shadow-sm">
+              <span className="flex items-center text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2.5 py-1 rounded-full shadow-sm">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Premium Member
+                Full Access (Free)
               </span>
             ) : (
               <button 

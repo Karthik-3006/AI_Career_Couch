@@ -38,6 +38,7 @@ def register(user_data: UserRegister):
     # Remove plain password and insert hashed password
     user_dict.pop("password", None)
     
+    from backend.app.services.subscription_service import is_subscription_enforced
     now = datetime.now(timezone.utc)
     user_dict.update({
         "email": email,
@@ -45,7 +46,7 @@ def register(user_data: UserRegister):
         "password_hash": hashed_pwd,
         "roles": user_dict.get("roles") or ["student"],
         "is_active": True,
-        "is_subscriber": False,
+        "is_subscriber": not is_subscription_enforced(),
         "subscription_expires_at": None,
         "created_at": now,
         "updated_at": now
@@ -91,12 +92,12 @@ def login(login_data: UserLogin):
     roles = user.get("roles") or ["student"]
     access_token = create_access_token(data={"sub": canonical_email, "roles": roles})
     
+    from backend.app.services.subscription_service import is_user_subscriber
     user_resp = {**user, "_id": str(user["_id"])}
     user_resp.pop("password_hash", None)
     if "roles" not in user_resp or not user_resp["roles"]:
         user_resp["roles"] = ["student"]
-    if "is_subscriber" not in user_resp:
-        user_resp["is_subscriber"] = False
+    user_resp["is_subscriber"] = is_user_subscriber(user)
 
     return {
         "access_token": access_token,

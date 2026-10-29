@@ -25,6 +25,12 @@ export default function Paywall({ featureName, onSubscribed }) {
     setLoading(true);
     try {
       const data = await subscriptionService.getSettings();
+      // If subscription enforcement is disabled (free mode), immediately unlock user
+      if (data && data.subscription_enforced === false) {
+        setUser(prev => prev ? { ...prev, is_subscriber: true } : prev);
+        if (onSubscribed) onSubscribed();
+        return;
+      }
       setPlans(data.plans || []);
       setUpiId(data.upi_id || '');
       setCustomQrCode(data.qr_code || null);

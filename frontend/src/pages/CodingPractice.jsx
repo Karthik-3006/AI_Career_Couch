@@ -35,7 +35,7 @@ export default function CodingPractice() {
   const topics = ['All', 'Arrays', 'Strings', 'Linked Lists', 'Stacks & Queues', 'Trees', 'Graphs', 'Dynamic Programming', 'Advanced Algorithmic Topics'];
 
   useEffect(() => {
-    if (user?.is_subscriber) {
+    if (user) {
       loadProblems();
     }
   }, [user]);

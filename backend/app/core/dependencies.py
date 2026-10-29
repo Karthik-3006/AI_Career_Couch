@@ -42,8 +42,10 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     user["_id"] = str(user["_id"])
     if not user.get("roles"):
         user["roles"] = ["student"]
-    if "is_subscriber" not in user:
-        user["is_subscriber"] = False
+    
+    from backend.app.services.subscription_service import is_user_subscriber
+    user["is_subscriber"] = is_user_subscriber(user)
+    
     if "is_active" not in user:
         user["is_active"] = True
 

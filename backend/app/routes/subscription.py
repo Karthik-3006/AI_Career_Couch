@@ -3,9 +3,21 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from bson import ObjectId
 from backend.app.core.database import get_db
 from backend.app.core.dependencies import get_current_user
-from backend.app.services.subscription_service import get_payment_settings, admin_update_subscription
+from backend.app.services.subscription_service import get_payment_settings, admin_update_subscription, is_subscription_enforced
 
 router = APIRouter(prefix="/subscription", tags=["Subscription Management"])
+
+@router.get("/status")
+def get_subscription_status():
+    """
+    Returns whether subscription requirement is active or free for all users.
+    """
+    enforced = is_subscription_enforced()
+    return {
+        "subscription_enforced": enforced,
+        "free_mode": not enforced,
+        "message": "Paid subscription is enforced." if enforced else "All features are completely free for all users."
+    }
 
 @router.get("/settings")
 def get_student_payment_settings(current_user: dict = Depends(get_current_user)):

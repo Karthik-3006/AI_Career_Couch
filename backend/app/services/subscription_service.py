@@ -3,10 +3,47 @@ from bson import ObjectId
 from fastapi import HTTPException
 from backend.app.core.database import get_db
 
+def is_subscription_enforced() -> bool:
+    """
+    Checks if paid subscription enforcement is currently active platform-wide.
+    If False (default), all platform features are completely free for all users.
+    Only when the admin toggles/raises the subscription requirement does it return True.
+    """
+    db = get_db()
+    settings = db.system_settings.find_one({"_id": "global_settings"})
+    if not settings:
+        return False
+    return bool(settings.get("subscription_enforced", False))
+
+def set_subscription_enforcement(enforced: bool) -> dict:
+    """
+    Enables or disables subscription requirement platform-wide.
+    """
+    db = get_db()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db.system_settings.update_one(
+        {"_id": "global_settings"},
+        {"$set": {"subscription_enforced": bool(enforced), "updated_at": now}},
+        upsert=True
+    )
+    return {
+        "success": True,
+        "subscription_enforced": bool(enforced),
+        "message": (
+            "Paid subscription requirement is now raised and enforced."
+            if enforced else
+            "Subscription removed! All platform features are now completely free for all users."
+        )
+    }
+
 def is_user_subscriber(user: dict) -> bool:
     """
-    Checks if a user has an active premium subscription.
+    Checks if a user has active subscriber privileges.
+    If subscription enforcement is not active, ALL users are automatically granted subscriber privileges.
     """
+    if not is_subscription_enforced():
+        return True
+
     if not user.get("is_subscriber", False):
         return False
         
@@ -17,48 +54,56 @@ def is_user_subscriber(user: dict) -> bool:
                 expiry = datetime.datetime.fromisoformat(expiry)
             except ValueError:
                 return False
-        if expiry < datetime.datetime.utcnow():
+        # Handle timezone-aware vs naive UTC
+        if expiry.tzinfo is not None:
+            now = datetime.datetime.now(datetime.timezone.utc)
+        else:
+            now = datetime.datetime.utcnow()
+        if expiry < now:
             return False
             
     return True
 
 def enforce_access_limit(user: dict, action_type: str) -> bool:
     """
-    Enforces the updated subscription rules:
-    - Non-subscribers get ZERO access to academic courses (tests) and the coding compiler.
-    - Non-subscribers get exactly ONE resume analysis and ONE mock interview run.
-    - Subscribers have unlimited access.
+    Enforces access limits based on subscription status:
+    - If subscription enforcement is disabled (free mode), all access is unconditionally permitted.
+    - If subscription enforcement is enabled:
+        - Non-subscribers get blocked from compiler and academics.
+        - Non-subscribers get 1 resume and 1 interview.
+        - Subscribers get unlimited access.
     """
+    if not is_subscription_enforced():
+        return True
+
     is_sub = is_user_subscriber(user)
+    if is_sub:
+        return True
+
     db = get_db()
     user_id = str(user["_id"])
     
     if action_type in ["compiler", "academics"]:
-        if not is_sub:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Access Denied. You must purchase a subscription to access the {action_type} system."
-            )
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access Denied. You must purchase a subscription to access the {action_type} system."
+        )
             
     elif action_type == "resume":
-        if not is_sub:
-            # Check if there is already an analyzed resume
-            count = db.resume_profiles.count_documents({"user_id": user_id, "analysis": {"$exists": True}})
-            if count >= 1:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Free limit reached. You can only analyze your resume once. Subscribe to unlock unlimited resume matching."
-                )
+        count = db.resume_profiles.count_documents({"user_id": user_id, "analysis": {"$exists": True}})
+        if count >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Free limit reached. You can only analyze your resume once. Subscribe to unlock unlimited resume matching."
+            )
                 
     elif action_type == "interview":
-        if not is_sub:
-            # Check if there is already an interview session
-            count = db.interviews.count_documents({"user_id": user_id})
-            if count >= 1:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Free limit reached. You can only take 1 mock interview for free. Subscribe to unlock unlimited AI interviews."
-                )
+        count = db.interviews.count_documents({"user_id": user_id})
+        if count >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Free limit reached. You can only take 1 mock interview for free. Subscribe to unlock unlimited AI interviews."
+            )
                 
     return True
 
@@ -66,16 +111,18 @@ def enforce_access_limit(user: dict, action_type: str) -> bool:
 
 def get_payment_settings() -> dict:
     """
-    Returns global system settings including UPI ID, QR code, and the single lifetime plan.
+    Returns global system settings including UPI ID, QR code, subscription enforcement status, and the single lifetime plan.
     """
     db = get_db()
     settings = db.system_settings.find_one({"_id": "global_settings"})
+    now = datetime.datetime.now(datetime.timezone.utc)
     if not settings:
         settings = {
             "_id": "global_settings",
             "upi_id": "careercoach@upi",
             "qr_code": None,
-            "updated_at": datetime.datetime.utcnow()
+            "subscription_enforced": False,
+            "updated_at": now
         }
         db.system_settings.insert_one(settings)
         
@@ -87,7 +134,7 @@ def get_payment_settings() -> dict:
             "name": "Lifetime Unlimited Premium Access",
             "price": 2999.00,
             "duration_months": 999,  # Represents lifetime
-            "created_at": datetime.datetime.utcnow()
+            "created_at": now
         }
         res = db.subscription_plans.insert_one(lifetime_plan)
         lifetime_plan["_id"] = str(res.inserted_id)
@@ -97,6 +144,7 @@ def get_payment_settings() -> dict:
     return {
         "upi_id": settings.get("upi_id"),
         "qr_code": settings.get("qr_code"),
+        "subscription_enforced": is_subscription_enforced(),
         "plans": [lifetime_plan]
     }
 
@@ -112,7 +160,7 @@ def update_payment_settings(upi_id: str = None, qr_code: str = None) -> dict:
         update_data["qr_code"] = qr_code
         
     if update_data:
-        update_data["updated_at"] = datetime.datetime.utcnow()
+        update_data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
         db.system_settings.update_one(
             {"_id": "global_settings"},
             {"$set": update_data},
@@ -125,6 +173,7 @@ def create_subscription_plan(name: str, price: float, duration_months: int) -> d
     Saves/Updates the single lifetime subscription plan price.
     """
     db = get_db()
+    now = datetime.datetime.now(datetime.timezone.utc)
     db.subscription_plans.update_one(
         {"type": "lifetime"},
         {
@@ -132,7 +181,7 @@ def create_subscription_plan(name: str, price: float, duration_months: int) -> d
                 "name": name,
                 "price": price,
                 "duration_months": duration_months,
-                "updated_at": datetime.datetime.utcnow()
+                "updated_at": now
             }
         },
         upsert=True
@@ -151,10 +200,15 @@ def admin_update_subscription(email: str, months: int) -> dict:
         raise HTTPException(status_code=404, detail="User with this email not found.")
         
     current_expiry = user.get("subscription_expires_at")
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     
-    if current_expiry and current_expiry > now:
-        new_expiry = current_expiry + datetime.timedelta(days=months * 30)
+    if current_expiry:
+        if current_expiry.tzinfo is None:
+            current_expiry = current_expiry.replace(tzinfo=datetime.timezone.utc)
+        if current_expiry > now:
+            new_expiry = current_expiry + datetime.timedelta(days=months * 30)
+        else:
+            new_expiry = now + datetime.timedelta(days=months * 30)
     else:
         new_expiry = now + datetime.timedelta(days=months * 30)
         

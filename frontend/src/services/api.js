@@ -125,6 +125,8 @@ export const updatesService = {
 
 export const subscriptionService = {
   getSettings: () => api.get('/subscription/settings').then(r => r.data),
+  getStatus: () => api.get('/subscription/status').then(r => r.data),
+  toggleEnforcement: (enforced) => api.post('/admin/subscription/toggle-enforcement', { enforced }).then(r => r.data),
   subscribe: (planId, utr) => api.post('/subscription/subscribe', { plan_id: planId, utr }).then(r => r.data),
   createPlan: (data) => api.post('/admin/subscription/plans', data).then(r => r.data),
   deletePlan: (id) => api.delete(`/admin/subscription/plans/${id}`).then(r => r.data),

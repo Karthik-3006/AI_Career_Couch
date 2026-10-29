@@ -4,9 +4,24 @@ from typing import Optional, List, Dict
 from bson import ObjectId
 from backend.app.core.database import get_db
 from backend.app.core.dependencies import get_admin_user
-from backend.app.services.subscription_service import admin_update_subscription, create_subscription_plan, update_payment_settings
+from backend.app.services.subscription_service import (
+    admin_update_subscription, 
+    create_subscription_plan, 
+    update_payment_settings,
+    set_subscription_enforcement,
+    is_subscription_enforced
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
+
+@router.post("/subscription/toggle-enforcement", dependencies=[Depends(get_admin_user)])
+def toggle_subscription_enforcement(enforced: bool = Body(..., embed=True)):
+    """
+    Toggles whether paid subscription is enforced platform-wide.
+    If False, all features are free for all students.
+    If True, paid subscription paywalls and limits are enforced.
+    """
+    return set_subscription_enforcement(enforced)
 
 @router.post("/subscription/grant", dependencies=[Depends(get_admin_user)])
 def grant_user_subscription(

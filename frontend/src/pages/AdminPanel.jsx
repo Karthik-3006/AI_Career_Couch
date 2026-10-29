@@ -10,6 +10,7 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('subscriptions');
 
   // Subscriptions Tab states
+  const [subscriptionEnforced, setSubscriptionEnforced] = useState(false);
   const [email, setEmail] = useState('');
   const [months, setMonths] = useState(1);
   const [upiId, setUpiId] = useState('');
@@ -54,6 +55,7 @@ export default function AdminPanel() {
   const loadSubscriptionData = async () => {
     try {
       const data = await subscriptionService.getSettings();
+      setSubscriptionEnforced(Boolean(data.subscription_enforced));
       setPlans(data.plans || []);
       setUpiId(data.upi_id || '');
       setQrCode(data.qr_code || null);
@@ -105,6 +107,28 @@ export default function AdminPanel() {
       return matchesCategory && matchesSearch;
     });
   }, [updates, categoryFilter, searchFilter]);
+
+  // Toggle subscription requirement platform-wide
+  const handleToggleSubscriptionEnforcement = async () => {
+    const nextState = !subscriptionEnforced;
+    const confirmPrompt = nextState
+      ? "Raise Subscription: Are you sure you want to enforce paid subscriptions platform-wide? Students will be prompted with paywalls on restricted features."
+      : "Make Platform Free: Are you sure you want to make all features 100% free for all students? The paywall will be removed platform-wide.";
+    if (!window.confirm(confirmPrompt)) return;
+
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await subscriptionService.toggleEnforcement(nextState);
+      setSubscriptionEnforced(nextState);
+      setMessage(res.message || (nextState ? "Paid subscription requirement raised." : "All features are now free for all users."));
+      loadSubscriptionData();
+    } catch (err) {
+      setMessage("Failed to update subscription mode: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 1. Grant subscription manually
   const handleGrant = async (e) => {
@@ -387,6 +411,43 @@ export default function AdminPanel() {
       {/* ── TAB A: SUBSCRIPTIONS & PAYMENT GATEWAY ── */}
       {activeTab === 'subscriptions' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Top Banner: Global Access Mode & Free Platform Toggle */}
+          <div className="md:col-span-2 bg-gradient-to-r from-slate-50 to-emerald-50/50 dark:from-slate-900 dark:to-emerald-950/20 p-6 rounded-2xl border-2 border-emerald-300 dark:border-palegreen shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
+                  subscriptionEnforced 
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300' 
+                    : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-palegreen border border-emerald-300'
+                }`}>
+                  {subscriptionEnforced ? '● Paid Subscription Enforced' : '● Free Access Mode (Active)'}
+                </span>
+              </div>
+              <h3 className="text-base font-black text-black dark:text-white">
+                {subscriptionEnforced 
+                  ? 'Paid Subscription is currently required for students' 
+                  : 'Platform is currently 100% FREE for all students'}
+              </h3>
+              <p className="text-xs text-gray-700 dark:text-gray-300 max-w-2xl leading-relaxed">
+                {subscriptionEnforced
+                  ? 'Students without an active subscription will encounter paywalls on coding compilers and academic quizzes. Click below if you want to make everything free for all students.'
+                  : 'All registered students currently have full, unlimited access to coding practice, subject tests, mock interviews, and resume tools without requiring a subscription. You can raise and enforce paid subscriptions below at any time.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleSubscriptionEnforcement}
+              disabled={loading}
+              className={`px-5 py-3 rounded-xl font-black text-xs transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer disabled:opacity-50 ${
+                subscriptionEnforced
+                  ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-palegreen dark:hover:bg-[#8ea89b] text-white dark:text-black'
+                  : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white'
+              }`}
+            >
+              {subscriptionEnforced ? '🎁 Make Free for All Users' : '⚡ Raise Subscription (Enforce Paid Access)'}
+            </button>
+          </div>
+
           {/* Sub A1: UPI Setup & Grant Subscriptions */}
           <div className="bg-white dark:bg-black p-6 rounded-2xl border-2 border-gray-200 dark:border-palegreen shadow-sm dark:shadow-[0_0_15px_rgba(159,188,173,0.1)] space-y-6">
             <form onSubmit={handleUpdatePaymentSettings} className="space-y-4">
