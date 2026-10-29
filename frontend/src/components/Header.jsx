@@ -40,22 +40,37 @@ export default function Header() {
         </div>
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-3">
         {user && (
           <>
-            {user.is_subscriber ? (
-              <span className="flex items-center text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2.5 py-1 rounded-full shadow-sm">
+            {user.bypass_all ? (
+              <span className="flex items-center text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-3 py-1 rounded-full shadow-sm">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Full Access (Free)
+                Platform Free (Bypass Active)
+              </span>
+            ) : user.is_trial_active ? (
+              <span className="flex items-center text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1 rounded-full shadow-sm" title="3-Day Free Trial Active. All features unlocked!">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Free Trial ({user.trial_days_left !== undefined ? user.trial_days_left : 3}d left)
+              </span>
+            ) : user.is_subscriber ? (
+              <span className="flex items-center text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-3 py-1 rounded-full shadow-sm">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Premium Member
               </span>
             ) : (
-              <button 
-                onClick={handleSimulateSubscription}
-                className="flex items-center text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-950/20 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-300 dark:border-gray-600 hover:border-primary-300 dark:hover:border-primary-700 px-3 py-1.5 rounded-lg transition-all"
-              >
-                <Sparkles className="h-3 w-3 mr-1 text-amber-500" />
-                Subscribe (Simulate)
-              </button>
+              <div className="flex items-center space-x-2">
+                <span className="flex items-center text-xs font-bold bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 px-2.5 py-1 rounded-full">
+                  Trial Expired
+                </span>
+                <button 
+                  onClick={handleSimulateSubscription}
+                  className="flex items-center text-xs font-semibold bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-950/20 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-300 dark:border-gray-600 hover:border-primary-300 dark:hover:border-primary-700 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                >
+                  <Sparkles className="h-3 w-3 mr-1 text-amber-500" />
+                  Subscribe
+                </button>
+              </div>
             )}
 
             <div className="flex items-center space-x-2 border-l pl-4 border-gray-200 dark:border-gray-700">

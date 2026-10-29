@@ -38,16 +38,18 @@ def register(user_data: UserRegister):
     # Remove plain password and insert hashed password
     user_dict.pop("password", None)
     
-    from backend.app.services.subscription_service import is_subscription_enforced
+    from backend.app.services.subscription_service import get_user_trial_status, is_user_subscriber, TRIAL_DURATION_DAYS
     now = datetime.now(timezone.utc)
+    trial_exp = now + datetime.timedelta(days=TRIAL_DURATION_DAYS)
     user_dict.update({
         "email": email,
         "name": user_data.name.strip(),
         "password_hash": hashed_pwd,
         "roles": user_dict.get("roles") or ["student"],
         "is_active": True,
-        "is_subscriber": not is_subscription_enforced(),
+        "is_subscriber": False,
         "subscription_expires_at": None,
+        "trial_expires_at": trial_exp,
         "created_at": now,
         "updated_at": now
     })
@@ -55,6 +57,13 @@ def register(user_data: UserRegister):
     try:
         result = db.users.insert_one(user_dict)
         user_dict["_id"] = str(result.inserted_id)
+        
+        trial_status = get_user_trial_status(user_dict)
+        user_dict["is_trial_active"] = trial_status["is_trial_active"]
+        user_dict["trial_days_left"] = trial_status["trial_days_left"]
+        user_dict["trial_expires_at"] = trial_status["trial_expires_at"]
+        user_dict["bypass_all"] = trial_status["bypass_all"]
+        user_dict["is_subscriber"] = is_user_subscriber(user_dict)
         return user_dict
     except DuplicateKeyError:
         raise HTTPException(
@@ -92,11 +101,17 @@ def login(login_data: UserLogin):
     roles = user.get("roles") or ["student"]
     access_token = create_access_token(data={"sub": canonical_email, "roles": roles})
     
-    from backend.app.services.subscription_service import is_user_subscriber
+    from backend.app.services.subscription_service import is_user_subscriber, get_user_trial_status
     user_resp = {**user, "_id": str(user["_id"])}
     user_resp.pop("password_hash", None)
     if "roles" not in user_resp or not user_resp["roles"]:
         user_resp["roles"] = ["student"]
+        
+    trial_status = get_user_trial_status(user)
+    user_resp["is_trial_active"] = trial_status["is_trial_active"]
+    user_resp["trial_days_left"] = trial_status["trial_days_left"]
+    user_resp["trial_expires_at"] = trial_status["trial_expires_at"]
+    user_resp["bypass_all"] = trial_status["bypass_all"]
     user_resp["is_subscriber"] = is_user_subscriber(user)
 
     return {

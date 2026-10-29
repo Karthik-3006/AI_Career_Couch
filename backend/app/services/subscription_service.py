@@ -3,115 +3,145 @@ from bson import ObjectId
 from fastapi import HTTPException
 from backend.app.core.database import get_db
 
-def is_subscription_enforced() -> bool:
+TRIAL_DURATION_DAYS = 3
+
+def to_utc(dt):
+    """Normalize datetime or ISO string to UTC timezone-aware datetime."""
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if isinstance(dt, datetime.datetime):
+        if dt.tzinfo is not None:
+            return dt.astimezone(datetime.timezone.utc)
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return None
+
+def is_bypass_all_active() -> bool:
     """
-    Checks if paid subscription enforcement is currently active platform-wide.
-    If False (default), all platform features are completely free for all users.
-    Only when the admin toggles/raises the subscription requirement does it return True.
+    Checks if administrator has enabled 'Bypass All', making all features free for everyone.
     """
     db = get_db()
     settings = db.system_settings.find_one({"_id": "global_settings"})
     if not settings:
         return False
-    return bool(settings.get("subscription_enforced", False))
+    return bool(settings.get("bypass_all", False))
 
-def set_subscription_enforcement(enforced: bool) -> dict:
+def set_bypass_all(bypass: bool) -> dict:
     """
-    Enables or disables subscription requirement platform-wide.
+    Enables or disables the 'Bypass All' override platform-wide.
     """
     db = get_db()
     now = datetime.datetime.now(datetime.timezone.utc)
     db.system_settings.update_one(
         {"_id": "global_settings"},
-        {"$set": {"subscription_enforced": bool(enforced), "updated_at": now}},
+        {
+            "$set": {
+                "bypass_all": bool(bypass),
+                "subscription_enforced": not bool(bypass),
+                "updated_at": now
+            }
+        },
         upsert=True
     )
     return {
         "success": True,
-        "subscription_enforced": bool(enforced),
+        "bypass_all": bool(bypass),
         "message": (
-            "Paid subscription requirement is now raised and enforced."
-            if enforced else
-            "Subscription removed! All platform features are now completely free for all users."
+            "Bypass All activated: All platform features are now unlocked for everyone."
+            if bypass else
+            "Bypass All deactivated: Standard 3-day free trial and auto-subscription rules are active."
         )
+    }
+
+def get_user_trial_status(user: dict) -> dict:
+    """
+    Calculates whether the user's 3-day free trial is currently active.
+    Every new user gets 3 days of free access starting from account registration.
+    """
+    bypass = is_bypass_all_active()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Check trial expiry date
+    trial_exp = to_utc(user.get("trial_expires_at"))
+    if not trial_exp:
+        created_at = to_utc(user.get("created_at")) or now
+        trial_exp = created_at + datetime.timedelta(days=TRIAL_DURATION_DAYS)
+        
+    is_active = (now < trial_exp) or bypass
+    time_diff = trial_exp - now
+    seconds_left = max(0, int(time_diff.total_seconds()))
+    days_left = max(0, (seconds_left + 86399) // 86400) if is_active else 0
+    hours_left = max(0, seconds_left // 3600) if is_active else 0
+
+    return {
+        "is_trial_active": is_active,
+        "trial_expires_at": trial_exp,
+        "trial_days_left": days_left,
+        "trial_hours_left": hours_left,
+        "bypass_all": bypass
     }
 
 def is_user_subscriber(user: dict) -> bool:
     """
-    Checks if a user has active subscriber privileges.
-    If subscription enforcement is not active, ALL users are automatically granted subscriber privileges.
+    Determines whether the user currently has access to platform features:
+    1. If Admin has enabled 'Bypass All', access is granted.
+    2. If user is an Admin, access is granted.
+    3. If user has an active paid subscription, access is granted.
+    4. If user is within their 3-day free trial period, access is granted.
+    5. After 3 days, trial expires and auto-subscription mode activates.
     """
-    if not is_subscription_enforced():
+    if is_bypass_all_active():
         return True
 
-    if not user.get("is_subscriber", False):
-        return False
-        
-    expiry = user.get("subscription_expires_at")
-    if expiry:
-        if isinstance(expiry, str):
-            try:
-                expiry = datetime.datetime.fromisoformat(expiry)
-            except ValueError:
-                return False
-        # Handle timezone-aware vs naive UTC
-        if expiry.tzinfo is not None:
-            now = datetime.datetime.now(datetime.timezone.utc)
-        else:
-            now = datetime.datetime.utcnow()
-        if expiry < now:
-            return False
-            
-    return True
+    roles = user.get("roles") or []
+    if "admin" in roles:
+        return True
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # 1. Check paid subscription status
+    is_paid = bool(user.get("is_subscriber", False))
+    if is_paid:
+        sub_exp = to_utc(user.get("subscription_expires_at"))
+        if sub_exp and sub_exp > now:
+            return True
+        elif not sub_exp:
+            # Lifetime subscription without expiration date
+            return True
+
+    # 2. Check 3-day free trial status
+    trial_status = get_user_trial_status(user)
+    if trial_status["is_trial_active"]:
+        return True
+
+    # Trial expired and not paid -> restricted
+    return False
 
 def enforce_access_limit(user: dict, action_type: str) -> bool:
     """
-    Enforces access limits based on subscription status:
-    - If subscription enforcement is disabled (free mode), all access is unconditionally permitted.
-    - If subscription enforcement is enabled:
-        - Non-subscribers get blocked from compiler and academics.
-        - Non-subscribers get 1 resume and 1 interview.
-        - Subscribers get unlimited access.
+    Enforces access limits:
+    - During the 3-day trial, user has full free access to any feature.
+    - If admin enabled Bypass All, user has full free access.
+    - If paid subscriber, user has full access.
+    - Otherwise (trial expired), auto-subscription mode blocks access.
     """
-    if not is_subscription_enforced():
+    if is_user_subscriber(user):
         return True
 
-    is_sub = is_user_subscriber(user)
-    if is_sub:
-        return True
-
-    db = get_db()
-    user_id = str(user["_id"])
-    
-    if action_type in ["compiler", "academics"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access Denied. You must purchase a subscription to access the {action_type} system."
-        )
-            
-    elif action_type == "resume":
-        count = db.resume_profiles.count_documents({"user_id": user_id, "analysis": {"$exists": True}})
-        if count >= 1:
-            raise HTTPException(
-                status_code=403,
-                detail="Free limit reached. You can only analyze your resume once. Subscribe to unlock unlimited resume matching."
-            )
-                
-    elif action_type == "interview":
-        count = db.interviews.count_documents({"user_id": user_id})
-        if count >= 1:
-            raise HTTPException(
-                status_code=403,
-                detail="Free limit reached. You can only take 1 mock interview for free. Subscribe to unlock unlimited AI interviews."
-            )
-                
-    return True
+    raise HTTPException(
+        status_code=403,
+        detail=f"Your 3-day free trial has expired. Auto-subscription mode is now active. Please subscribe to continue using {action_type}."
+    )
 
 # Admin UPI & Plan settings functions
 
 def get_payment_settings() -> dict:
     """
-    Returns global system settings including UPI ID, QR code, subscription enforcement status, and the single lifetime plan.
+    Returns global system settings including UPI ID, QR code, bypass status, and the single lifetime plan.
     """
     db = get_db()
     settings = db.system_settings.find_one({"_id": "global_settings"})
@@ -121,7 +151,8 @@ def get_payment_settings() -> dict:
             "_id": "global_settings",
             "upi_id": "careercoach@upi",
             "qr_code": None,
-            "subscription_enforced": False,
+            "bypass_all": False,
+            "trial_days": TRIAL_DURATION_DAYS,
             "updated_at": now
         }
         db.system_settings.insert_one(settings)
@@ -144,13 +175,15 @@ def get_payment_settings() -> dict:
     return {
         "upi_id": settings.get("upi_id"),
         "qr_code": settings.get("qr_code"),
-        "subscription_enforced": is_subscription_enforced(),
+        "bypass_all": is_bypass_all_active(),
+        "trial_days": TRIAL_DURATION_DAYS,
+        "subscription_enforced": not is_bypass_all_active(),
         "plans": [lifetime_plan]
     }
 
 def update_payment_settings(upi_id: str = None, qr_code: str = None) -> dict:
     """
-    Updates the administrator UPI ID and/or QR code (base64 string) for student payments.
+    Updates administrator UPI ID and/or QR code for student payments.
     """
     db = get_db()
     update_data = {}
@@ -170,7 +203,7 @@ def update_payment_settings(upi_id: str = None, qr_code: str = None) -> dict:
 
 def create_subscription_plan(name: str, price: float, duration_months: int) -> dict:
     """
-    Saves/Updates the single lifetime subscription plan price.
+    Saves/Updates the lifetime subscription plan price (handled by admin).
     """
     db = get_db()
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -192,28 +225,24 @@ def create_subscription_plan(name: str, price: float, duration_months: int) -> d
 
 def admin_update_subscription(email: str, months: int) -> dict:
     """
-    Admin command to grant or extend subscription.
+    Admin command to grant or extend subscription for a student.
     """
     db = get_db()
-    user = db.users.find_one({"email": email})
+    clean_email = email.strip().lower()
+    user = db.users.find_one({"email": clean_email})
     if not user:
         raise HTTPException(status_code=404, detail="User with this email not found.")
         
-    current_expiry = user.get("subscription_expires_at")
+    current_expiry = to_utc(user.get("subscription_expires_at"))
     now = datetime.datetime.now(datetime.timezone.utc)
     
-    if current_expiry:
-        if current_expiry.tzinfo is None:
-            current_expiry = current_expiry.replace(tzinfo=datetime.timezone.utc)
-        if current_expiry > now:
-            new_expiry = current_expiry + datetime.timedelta(days=months * 30)
-        else:
-            new_expiry = now + datetime.timedelta(days=months * 30)
+    if current_expiry and current_expiry > now:
+        new_expiry = current_expiry + datetime.timedelta(days=months * 30)
     else:
         new_expiry = now + datetime.timedelta(days=months * 30)
         
     db.users.update_one(
-        {"email": email},
+        {"email": clean_email},
         {
             "$set": {
                 "is_subscriber": True,
@@ -224,7 +253,7 @@ def admin_update_subscription(email: str, months: int) -> dict:
     )
     
     return {
-        "email": email,
+        "email": clean_email,
         "is_subscriber": True,
         "subscription_expires_at": new_expiry.isoformat()
     }

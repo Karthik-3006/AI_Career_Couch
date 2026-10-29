@@ -216,7 +216,7 @@ export default function ResumeAnalyzer() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t dark:border-slate-700">
                   {/* Missing Skills */}
                   <div>
-                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-2">
+                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider mb-2">
                       Missing Placement Skills
                     </h4>
                     <div className="flex flex-wrap gap-1">
@@ -230,7 +230,7 @@ export default function ResumeAnalyzer() {
 
                   {/* Keywords */}
                   <div>
-                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-2">
+                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider mb-2">
                       Keywords Detected
                     </h4>
                     <div className="flex flex-wrap gap-1">
@@ -246,7 +246,7 @@ export default function ResumeAnalyzer() {
                 {/* Suggested Placement Courses */}
                 {analysis.suggested_courses && analysis.suggested_courses.length > 0 && (
                   <div className="pt-6 border-t dark:border-slate-700 space-y-3">
-                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider text-gray-400 dark:text-slate-400 flex items-center">
+                    <h4 className="font-bold text-gray-800 dark:text-white text-xs uppercase tracking-wider flex items-center">
                       <Book className="h-4.5 w-4.5 text-indigo-500 mr-2 shrink-0" /> Suggested Courses to Close Skill Gaps
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

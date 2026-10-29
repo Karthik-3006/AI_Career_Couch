@@ -3,20 +3,29 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from bson import ObjectId
 from backend.app.core.database import get_db
 from backend.app.core.dependencies import get_current_user
-from backend.app.services.subscription_service import get_payment_settings, admin_update_subscription, is_subscription_enforced
+from backend.app.services.subscription_service import (
+    get_payment_settings, 
+    admin_update_subscription, 
+    is_subscription_enforced,
+    is_bypass_all_active,
+    TRIAL_DURATION_DAYS
+)
 
 router = APIRouter(prefix="/subscription", tags=["Subscription Management"])
 
 @router.get("/status")
 def get_subscription_status():
     """
-    Returns whether subscription requirement is active or free for all users.
+    Returns whether subscription requirement is active, trial settings, and bypass all state.
     """
     enforced = is_subscription_enforced()
+    bypass_all = is_bypass_all_active()
     return {
         "subscription_enforced": enforced,
-        "free_mode": not enforced,
-        "message": "Paid subscription is enforced." if enforced else "All features are completely free for all users."
+        "free_mode": not enforced or bypass_all,
+        "bypass_all": bypass_all,
+        "trial_duration_days": TRIAL_DURATION_DAYS,
+        "message": "Bypass All is active. All features are free." if bypass_all else ("Paid subscription is enforced." if enforced else "All features are free for all users.")
     }
 
 @router.get("/settings")

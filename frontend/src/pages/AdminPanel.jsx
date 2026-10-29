@@ -11,6 +11,7 @@ export default function AdminPanel() {
 
   // Subscriptions Tab states
   const [subscriptionEnforced, setSubscriptionEnforced] = useState(false);
+  const [bypassAll, setBypassAll] = useState(false);
   const [email, setEmail] = useState('');
   const [months, setMonths] = useState(1);
   const [upiId, setUpiId] = useState('');
@@ -55,6 +56,7 @@ export default function AdminPanel() {
   const loadSubscriptionData = async () => {
     try {
       const data = await subscriptionService.getSettings();
+      setBypassAll(Boolean(data.bypass_all));
       setSubscriptionEnforced(Boolean(data.subscription_enforced));
       setPlans(data.plans || []);
       setUpiId(data.upi_id || '');
@@ -125,6 +127,28 @@ export default function AdminPanel() {
       loadSubscriptionData();
     } catch (err) {
       setMessage("Failed to update subscription mode: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Toggle Bypass All platform-wide
+  const handleToggleBypassAll = async () => {
+    const nextState = !bypassAll;
+    const confirmPrompt = nextState
+      ? "Enable Bypass All: All features will be 100% free for all students worldwide, bypassing the 3-day trial and all subscription limits."
+      : "Disable Bypass All: Activate 3-Day Free Trial & Auto-Subscription mode. Users whose 3-day trial has passed will require a subscription.";
+    if (!window.confirm(confirmPrompt)) return;
+
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await subscriptionService.toggleBypassAll(nextState);
+      setBypassAll(nextState);
+      setMessage(res.message);
+      loadSubscriptionData();
+    } catch (err) {
+      setMessage("Failed to update Bypass All mode: " + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
@@ -411,41 +435,46 @@ export default function AdminPanel() {
       {/* ── TAB A: SUBSCRIPTIONS & PAYMENT GATEWAY ── */}
       {activeTab === 'subscriptions' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Top Banner: Global Access Mode & Free Platform Toggle */}
-          <div className="md:col-span-2 bg-gradient-to-r from-slate-50 to-emerald-50/50 dark:from-slate-900 dark:to-emerald-950/20 p-6 rounded-2xl border-2 border-emerald-300 dark:border-palegreen shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center space-x-2">
+          {/* Top Banner: 3-Day Free Trial & Bypass All Override */}
+          <div className="md:col-span-2 bg-gradient-to-r from-slate-50 to-emerald-50/50 dark:from-slate-900 dark:to-emerald-950/20 p-6 rounded-2xl border-2 border-emerald-300 dark:border-palegreen shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${
-                  subscriptionEnforced 
-                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-300' 
+                  bypassAll 
+                    ? 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
                     : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-palegreen border border-emerald-300'
                 }`}>
-                  {subscriptionEnforced ? '● Paid Subscription Enforced' : '● Free Access Mode (Active)'}
+                  {bypassAll ? '● Bypass All Active (Free for Everyone)' : '● 3-Day Free Trial Mode Active'}
+                </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  Auto-Subscription: Enabled
                 </span>
               </div>
               <h3 className="text-base font-black text-black dark:text-white">
-                {subscriptionEnforced 
-                  ? 'Paid Subscription is currently required for students' 
-                  : 'Platform is currently 100% FREE for all students'}
+                {bypassAll 
+                  ? 'Bypass All is ON: All features unlocked for everyone' 
+                  : 'New users receive a 3-Day Free Trial upon registration'}
               </h3>
               <p className="text-xs text-gray-700 dark:text-gray-300 max-w-2xl leading-relaxed">
-                {subscriptionEnforced
-                  ? 'Students without an active subscription will encounter paywalls on coding compilers and academic quizzes. Click below if you want to make everything free for all students.'
-                  : 'All registered students currently have full, unlimited access to coding practice, subject tests, mock interviews, and resume tools without requiring a subscription. You can raise and enforce paid subscriptions below at any time.'}
+                {bypassAll
+                  ? 'Administrator override is ON. Every student has 100% free access to coding compilers, placement test MCQs, resume analysis, and mock interviews without trial limits or paywalls.'
+                  : 'Initially, NO user has a premium subscription. Every student can use any feature completely free for 3 days. Once their 3-day trial period ends, auto-subscription mode activates. Click the button to the right to toggle Bypass All on or off.'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleToggleSubscriptionEnforcement}
-              disabled={loading}
-              className={`px-5 py-3 rounded-xl font-black text-xs transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer disabled:opacity-50 ${
-                subscriptionEnforced
-                  ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-palegreen dark:hover:bg-[#8ea89b] text-white dark:text-black'
-                  : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white'
-              }`}
-            >
-              {subscriptionEnforced ? '🎁 Make Free for All Users' : '⚡ Raise Subscription (Enforce Paid Access)'}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleBypassAll}
+                disabled={loading}
+                className={`px-5 py-3 rounded-xl font-black text-xs transition-all shadow-md active:scale-95 whitespace-nowrap cursor-pointer disabled:opacity-50 ${
+                  bypassAll
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 dark:bg-palegreen dark:hover:bg-[#8ea89b] text-white dark:text-black'
+                }`}
+              >
+                {bypassAll ? '🔒 Turn OFF Bypass All' : '🔓 Enable Bypass All (Free for All)'}
+              </button>
+            </div>
           </div>
 
           {/* Sub A1: UPI Setup & Grant Subscriptions */}

@@ -58,7 +58,7 @@ export default function InterviewSetup() {
 
   // 2. Evaluates current answer & fetches feedback
   const handleAnswerSubmit = async () => {
-    if (!answerInput.strip()) {
+    if (!answerInput.trim()) {
       alert("Answer cannot be empty!");
       return;
     }
@@ -220,7 +220,7 @@ export default function InterviewSetup() {
               <div className="flex justify-end">
                 <button
                   onClick={handleAnswerSubmit}
-                  disabled={submittingAnswer || !answerInput.strip()}
+                  disabled={submittingAnswer || !answerInput.trim()}
                   className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-bold px-6 py-2.5 rounded-xl transition-colors"
                 >
                   {submittingAnswer ? 'Evaluating Answer...' : 'Submit Answer'}

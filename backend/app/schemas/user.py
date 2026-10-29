@@ -15,6 +15,10 @@ class UserBase(BaseModel):
     interests: List[str] = Field(default=[])
     is_subscriber: bool = Field(default=False)
     subscription_expires_at: Optional[datetime] = None
+    trial_expires_at: Optional[datetime] = None
+    is_trial_active: bool = Field(default=False)
+    trial_days_left: Optional[int] = None
+    bypass_all: bool = Field(default=False)
 
     @field_validator("name", mode="before")
     @classmethod

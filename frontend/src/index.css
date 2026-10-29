@@ -8,6 +8,15 @@ html, body, #root {
   padding: 0;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
 /* Custom scrollbars for a clean SaaS look */
 ::-webkit-scrollbar {
   width: 6px;
@@ -22,4 +31,32 @@ html, body, #root {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Dark mode scrollbars */
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Ensure native select and option elements are fully readable in dark mode across all browsers */
+.dark select {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+.dark select option {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #94a3b8;
 }

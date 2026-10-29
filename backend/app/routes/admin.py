@@ -9,10 +9,19 @@ from backend.app.services.subscription_service import (
     create_subscription_plan, 
     update_payment_settings,
     set_subscription_enforcement,
-    is_subscription_enforced
+    is_subscription_enforced,
+    set_bypass_all,
+    is_bypass_all_active
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
+
+@router.post("/subscription/bypass-all", dependencies=[Depends(get_admin_user)])
+def toggle_bypass_all(bypass: bool = Body(..., embed=True)):
+    """
+    Administrator toggle to bypass all subscriptions and paywalls platform-wide.
+    """
+    return set_bypass_all(bypass)
 
 @router.post("/subscription/toggle-enforcement", dependencies=[Depends(get_admin_user)])
 def toggle_subscription_enforcement(enforced: bool = Body(..., embed=True)):
